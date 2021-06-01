@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "simplifiedorleans.fullname" . }}
+  labels:
+    {{- include "simplifiedorleans.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "simplifiedorleans.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "simplifiedorleans.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # resources:
+          #   requests:
+          #     memory: "1000Mi"
+          #     cpu: "600m"
+          #   limits:
+          #     memory: "1000Mi"
+          #     cpu: "600m"
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+            - name: siloport
+              containerPort: 11111
+              protocol: TCP
+            - name: gatewayport
+              containerPort: 30000
+              protocol: TCP
+          env:
+          - name: ApplicationInsights__InstrumentationKey
+            valueFrom:
+              secretKeyRef:
+                name: simplifiedorleanssecrets
+                key: ApplicationInsights__InstrumentationKey
+          - name: CosmosDb__AccountEndpoint
+            valueFrom:
+              secretKeyRef:
+                name: simplifiedorleanssecrets
+                key: CosmosDb__AccountEndpoint
+          - name: CosmosDb__AccountKey
+            valueFrom:
+              secretKeyRef:
+                name: simplifiedorleanssecrets
+                key: CosmosDb__AccountKey
+          - name: CosmosDb__DB
+            valueFrom:
+              secretKeyRef:
+                name: simplifiedorleanssecrets
+                key: CosmosDb__DB
+          - name: CosmosDb__DatabaseId
+            valueFrom:
+              secretKeyRef:
+                name: simplifiedorleanssecrets
+                key: CosmosDb__DatabaseId
+          - name: CosmosDb__Collection
+            valueFrom:
+              secretKeyRef:
+                name: simplifiedorleanssecrets
+                key: CosmosDb__Collection
+          - name: CosmosDb__ContainerId
+            valueFrom:
+              secretKeyRef:
+                name: simplifiedorleanssecrets
+                key: CosmosDb__ContainerId
+          # Configure settings to let Orleans know which cluster it belongs to
+          # and which pod it is running in
+          - name: ORLEANS_SERVICE_ID
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.labels['orleans/serviceId']
+          - name: ORLEANS_CLUSTER_ID
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.labels['orleans/clusterId']
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: DOTNET_SHUTDOWNTIMEOUTSECONDS
+            value: "120"
+      terminationGracePeriodSeconds: 180
+  minReadySeconds: 60
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
